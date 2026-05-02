@@ -1,0 +1,16 @@
+# Compilação
+*.o
+*.exe
+bin/
+obj/
+
+# Executáveis
+classificador_ecg
+
+# Pastas de IDE e Sistemas
+.vscode/
+.DS_Store
+build/data/
+
+# Datasets
+data/
