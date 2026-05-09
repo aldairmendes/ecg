@@ -3,31 +3,32 @@ import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, classification_report
 import joblib
+from skl2onnx import convert_sklearn
+from skl2onnx.common.data_types import FloatTensorType
 
-# 1. Carregar os dados (ajustado para sua pasta 'data')
 print("Carregando datasets...")
 train_df = pd.read_csv('data/mitbih_train.csv', header=None)
 test_df = pd.read_csv('data/mitbih_test.csv', header=None)
 
-# 2. Separar características (X) e rótulos (y)
-# Os sinais de ECG ocupam as primeiras 187 colunas; a última é a classe.
 X_train = train_df.iloc[:, :-1].values
 y_train = train_df.iloc[:, -1].values
 X_test = test_df.iloc[:, :-1].values
 y_test = test_df.iloc[:, -1].values
 
-# 3. Treinar o modelo
-# Usaremos Random Forest por ser robusto e lidar bem com sinais fuidorentos
-print("Treinando o modelo Random Forest... Isso pode levar um minuto.")
+print("Treinando o modelo Random Forest...")
 model = RandomForestClassifier(n_estimators=100, n_jobs=-1, random_state=42)
 model.fit(X_train, y_train)
 
-# 4. Validar o modelo
 y_pred = model.predict(X_test)
 print(f"\nAcurácia no Teste: {accuracy_score(y_test, y_pred):.4f}")
-print("\nRelatório de Classificação:")
 print(classification_report(y_test, y_pred))
 
-# 5. Salvar o modelo para o seu C++ usar depois
 joblib.dump(model, 'data/modelo_ecg.pkl')
-print("\nModelo salvo com sucesso em 'data/modelo_ecg.pkl'!")
+print("Modelo .pkl salvo!")
+
+print("\nExportando para ONNX...")
+initial_type = [('float_input', FloatTensorType([None, 187]))]
+modelo_onnx = convert_sklearn(model, initial_types=initial_type)
+with open("data/modelo_ecg.onnx", "wb") as f:
+    f.write(modelo_onnx.SerializeToString())
+print("Modelo ONNX salvo em data/modelo_ecg.onnx!")

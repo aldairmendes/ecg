@@ -1,16 +1,30 @@
-# Compilação
+# Compilação e Binários
 *.o
+*.obj
 *.exe
+*.out
 bin/
 obj/
+build/
 
-# Executáveis
+# Executáveis específicos do projeto
+simulacao
 classificador_ecg
 
-# Pastas de IDE e Sistemas
-.vscode/
-.DS_Store
-build/data/
+# Bibliotecas Externas (ONNX Runtime, etc)
+libs/
 
-# Datasets
-data/
+# Python (Ambiente Virtual e Cache)
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+
+# IDEs e Sistema
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Datasets (mantendo apenas a estrutura se necessário)
+data/*.csv

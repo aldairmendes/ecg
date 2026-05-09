@@ -1,26 +1,24 @@
 #ifndef CLASSIFICADOR_ECG_H
 #define CLASSIFICADOR_ECG_H
 
-#include <vector>
 #include <string>
+#include <vector>
+#include "EcgBuffer.h"
+#include <onnxruntime_cxx_api.h>
 
 class ClassificadorECG {
 private:
-    std::vector<float> janelaSinal;
-    const std::size_t TAMANHO_JANELA = 500;
+    ECG_Buffer buffer;
+    Ort::Env env;
+    Ort::Session session;
+    int64_t ultimaClasse;
 
 public:
-    // Construtor (opcional, mas boa prática)
     ClassificadorECG();
-
-    // Processa o dado vindo do sensor
     void processarAmostra(float valorBruto);
-
-    // Normalização do sinal
     float normalizar(float entrada);
-
-    // Classificação da janela atual
     std::string classificar();
+    int64_t getUltimaClasse() const;
 };
 
 #endif
