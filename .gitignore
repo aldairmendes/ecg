@@ -26,5 +26,5 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-# Datasets (mantendo apenas a estrutura se necessário)
-data/*.csv
+# Arquivos pesados
+data/
