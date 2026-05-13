@@ -17,6 +17,7 @@ public:
     ClassificadorECG();
     void processarAmostra(float valorBruto);
     float normalizar(float entrada);
+    int classificar(const std::vector<float>& amostra);
     std::string classificar();
     int64_t getUltimaClasse() const;
 };

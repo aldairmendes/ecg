@@ -29,6 +29,36 @@ float ClassificadorECG::normalizar(float entrada) {
     return entrada;
 }
 
+int ClassificadorECG::classificar(const std::vector<float>& amostra) {
+    try {
+        // O shape agora usa o tamanho do vetor passado
+        std::vector<int64_t> shape = {1, (int64_t)amostra.size()};
+
+        auto memory_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
+        
+        // Usamos amostra.data() em vez de input.data()
+        Ort::Value input_tensor = Ort::Value::CreateTensor<float>(
+            memory_info, const_cast<float*>(amostra.data()), amostra.size(), shape.data(), shape.size()
+        );
+
+        const char* input_names[]  = {"float_input"};
+        const char* output_names[] = {"output_label"};
+
+        auto outputs = session.Run(
+            Ort::RunOptions{nullptr},
+            input_names, &input_tensor, 1,
+            output_names, 1
+        );
+
+        ultimaClasse = outputs[0].GetTensorData<int64_t>()[0];
+        return (int)ultimaClasse; // Retorna o número para facilitar o teste
+
+    } catch (const std::exception& e) {
+        std::cerr << "Erro na inferência: " << e.what() << std::endl;
+        return -1;
+    }
+}
+
 std::string ClassificadorECG::classificar() {
     try {
         std::vector<float> input(buffer.samples, buffer.samples + BUFFER_SIZE);
