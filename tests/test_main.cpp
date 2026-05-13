@@ -1,6 +1,7 @@
 #define CATCH_CONFIG_MAIN  // O Catch2 gera o main() automaticamente aqui
 #include "catch.hpp"
 #include "ClassificadorECG.h"
+#include "EcgBuffer.h"
 #include <fstream>
 #include <sstream>
 #include <vector>
@@ -51,7 +52,7 @@ TEST_CASE("Validação do Classificador de ECG com PTBDB", "[ml]") {
         int acertos = 0;
 
         for (const auto& sinal : dados) {
-            if (classificador.classificarAmostra(sinal) == 0) acertos++;
+            if (classificador.classificar(sinal) == 0) acertos++;
         }
 
         float acuracia = (float)acertos / dados.size();
@@ -65,11 +66,50 @@ TEST_CASE("Validação do Classificador de ECG com PTBDB", "[ml]") {
 
         for (const auto& sinal : dados) {
             // Considera acerto qualquer classe de arritmia (>= 1)
-            if (classificador.classificarAmostra(sinal) >= 1) acertos++;
+            if (classificador.classificar(sinal) >= 1) acertos++;
         }
 
         float acuracia = (float)acertos / dados.size();
         std::cout << "[Abnormal] Acuracia: " << acuracia * 100 << "%" << std::endl;
         REQUIRE(acuracia >= 0.97);
+    }
+}
+
+TEST_CASE("Simulação de Batimento Real (AD8232)", "[sensor]") {
+    ClassificadorECG classificador;
+    ECG_Buffer buffer;
+    
+    // 1. Inicialização do Struct
+    buffer.index = 0;
+    buffer.ready = false;
+
+    // 2. Simulação de captura do sensor (Preenchendo os 187 pontos)
+    // No hardware real, isso aconteceria dentro de um loop de 360Hz
+    auto amostrasCsv = carregarAmostras("data/ptbdb_normal.csv", 1);
+    auto sinalReal = amostrasCsv[0]; // Pega o primeiro batimento normal
+
+    for (float valorSinal : sinalReal) {
+        if (buffer.index < BUFFER_SIZE) {
+            buffer.samples[buffer.index] = valorSinal;
+            buffer.index++;
+        }
+    }
+    buffer.ready = (buffer.index == BUFFER_SIZE);
+
+    // 3. Classificação do Struct preenchido
+    SECTION("Classificando o buffer preenchido") {
+        REQUIRE(buffer.ready == true);
+
+        // Convertendo o array do struct para um vector para o classificador
+        std::vector<float> sinalParaClassificar(
+            buffer.samples,             // Isso funciona como um Spread Operator, não é um vetor dentro de outro
+            buffer.samples + BUFFER_SIZE
+        );
+
+        int resultado = classificador.classificar(sinalParaClassificar);
+        
+        // Como o sinal veio do arquivo 'normal', esperamos classe 0
+        CHECK(resultado == 0);
+        std::cout << "Resultado da classificação do buffer: " << resultado << std::endl;
     }
 }
