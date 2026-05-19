@@ -7,19 +7,15 @@
 class ClassificadorECG {
 private:
     std::vector<float> janelaSinal;
-    const std::size_t TAMANHO_JANELA = 500;
+    static constexpr std::size_t TAMANHO_JANELA = 187;
 
 public:
-    // Construtor (opcional, mas boa prática)
     ClassificadorECG();
 
-    // Processa o dado vindo do sensor
     void processarAmostra(float valorBruto);
-
-    // Normalização do sinal
     float normalizar(float entrada);
 
-    // Classificação da janela atual
+    int classificar(const std::vector<float>& sinal);
     std::string classificar();
 };
 

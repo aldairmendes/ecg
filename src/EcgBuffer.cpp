@@ -1,20 +1,30 @@
-#ifndef ECG_DATA_H
-#define ECG_DATA_H
+#include "EcgBuffer.h"
 
-#include <stdint.h>
+void ecg_buffer_init(ECG_Buffer* buf) {
+    buf->index = 0;
+    buf->ready = false;
+}
 
-#define BUFFER_SIZE 188
+bool ecg_buffer_push(ECG_Buffer* buf, uint16_t sample) {
+    if (buf->ready) {
+        return false;
+    }
 
-// Utilizaremos o tipo uint16_t para guardar os sinais (variam de 0 a 4094) e o tipo uint8_t para indexar, 
-// isso evita desperdício de memória.
+    buf->samples[buf->index++] = sample;
 
-// uint8_t: 0 a 2^8 - 1 (255).
-// uint16_t: 0 a 2^16 - 1 (65.535).
+    if (buf->index >= BUFFER_SIZE) {
+        buf->ready = true;
+        return true;
+    }
 
-struct ECG_Buffer {
-    uint16_t samples[BUFFER_SIZE];
-    uint8_t index;
-    bool ready; // Indica que o buffer encheu
-};
+    return false;
+}
 
-#endif
+void ecg_buffer_reset(ECG_Buffer* buf) {
+    buf->index = 0;
+    buf->ready = false;
+}
+
+bool ecg_buffer_is_ready(const ECG_Buffer* buf) {
+    return buf->ready;
+}
