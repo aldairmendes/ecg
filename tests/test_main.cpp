@@ -1,5 +1,5 @@
 #define CATCH_CONFIG_MAIN  // O Catch2 gera o main() automaticamente aqui
-#include "catch.hpp"
+#include "catch2/catch.hpp"
 #include "ClassificadorECG.h"
 #include "EcgBuffer.h"
 #include <fstream>

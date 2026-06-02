@@ -17,7 +17,10 @@ add_executable(programa_ecg
     src/ClassificadorECG.cpp
     src/EcgBuffer.cpp
     src/SerialPort.cpp
+    src/modelo_ecg_export.cpp
 )
+
+target_compile_features(programa_ecg PRIVATE cxx_std_17)
 
 if(MSVC)
     target_compile_options(programa_ecg PRIVATE /bigobj)
@@ -27,7 +30,10 @@ add_executable(executa_testes
     tests/test_main.cpp
     src/ClassificadorECG.cpp
     src/EcgBuffer.cpp
+    src/modelo_ecg_export.cpp
 )
+
+target_compile_features(executa_testes PRIVATE cxx_std_17)
 
 target_include_directories(executa_testes PRIVATE
     ${catch2_SOURCE_DIR}/single_include
