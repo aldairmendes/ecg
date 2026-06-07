@@ -1,72 +1,53 @@
 #include "ClassificadorECG.h"
 #include <iostream>
-#include <vector>
+
+// O modelo espera floats normalizados em [0.0, 1.0].
+// O ADC do ESP32 produz inteiros em [0, 4095] (12 bits).
+// O dataset MIT-BIH já vem normalizado, então ao rodar simulation.cpp os
+// valores passam direto. Na captura real do AD8232, a divisão por 4095
+// é feita antes de chegar aqui (em main.cpp, via saveBufferAsCsv /
+// processFullBuffer). Se quiser centralizar, ative a linha abaixo em
+// normalizar() e remova a divisão de main.cpp.
 
 ClassificadorECG::ClassificadorECG()
     : env(ORT_LOGGING_LEVEL_WARNING, "ecg"),
       session(env, "data/modelo_ecg.onnx", Ort::SessionOptions{}),
-      ultimaClasse(-1) {
-    buffer.index = 0;
-    buffer.ready = false;
-}
+      ultimaClasse(-1)
+{}
 
-void ClassificadorECG::processarAmostra(float valorBruto) {
-    buffer.samples[buffer.index] = normalizar(valorBruto);
-    buffer.index++;
-
-    if (buffer.index >= BUFFER_SIZE) {
-        buffer.ready = true;
-        buffer.index = 0;
-        std::string resultado = classificar();
-        buffer.ready = false;
-    }
-}
+// ─── Normalização ──────────────────────────────────────────────────────────
 
 float ClassificadorECG::normalizar(float entrada) {
-    // Dados do MIT-BIH já vêm normalizados (0.0 a 1.0): passa direto.
-    // Quando vier do AD8232 real (ADC 12 bits, 0–4095), troque por:
-    //     return entrada / 4095.0f;
+    // Dados do MIT-BIH já estão em [0,1]: passam direto.
+    // Dados brutos do AD8232 (0-4095) são normalizados em main.cpp antes
+    // de chegar aqui, então não precisamos dividir novamente.
     return entrada;
 }
 
-int ClassificadorECG::classificar(const std::vector<float>& amostra) {
-    try {
-        // O shape agora usa o tamanho do vetor passado
-        std::vector<int64_t> shape = {1, (int64_t)amostra.size()};
+// ─── Acumulação de amostras ────────────────────────────────────────────────
 
-        auto memory_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
-        
-        // Usamos amostra.data() em vez de input.data()
-        Ort::Value input_tensor = Ort::Value::CreateTensor<float>(
-            memory_info, const_cast<float*>(amostra.data()), amostra.size(), shape.data(), shape.size()
-        );
+void ClassificadorECG::processarAmostra(float valorBruto) {
+    janelaSinal.push_back(normalizar(valorBruto));
 
-        const char* input_names[]  = {"float_input"};
-        const char* output_names[] = {"output_label"};
-
-        auto outputs = session.Run(
-            Ort::RunOptions{nullptr},
-            input_names, &input_tensor, 1,
-            output_names, 1
-        );
-
-        ultimaClasse = outputs[0].GetTensorData<int64_t>()[0];
-        return (int)ultimaClasse; // Retorna o número para facilitar o teste
-
-    } catch (const std::exception& e) {
-        std::cerr << "Erro na inferência: " << e.what() << std::endl;
-        return -1;
+    if (janelaSinal.size() >= TAMANHO_JANELA) {
+        std::string resultado = classificarJanela();
+        std::cout << "Classificacao: " << resultado << std::endl;
+        std::cout.flush();
+        janelaSinal.clear();
     }
 }
 
-std::string ClassificadorECG::classificar() {
-    try {
-        std::vector<float> input(buffer.samples, buffer.samples + BUFFER_SIZE);
-        std::vector<int64_t> shape = {1, BUFFER_SIZE};
+// ─── Inferência ONNX ───────────────────────────────────────────────────────
 
-        auto memory_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
-        Ort::Value input_tensor = Ort::Value::CreateTensor<float>(
-            memory_info, input.data(), input.size(), shape.data(), shape.size()
+int ClassificadorECG::classificar(const std::vector<float>& sinal) {
+    try {
+        // Copia para garantir que o buffer é contíguo e não-const
+        std::vector<float> entrada(sinal.begin(), sinal.end());
+        std::vector<int64_t> shape = {1, static_cast<int64_t>(entrada.size())};
+
+        auto mem = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
+        Ort::Value tensor = Ort::Value::CreateTensor<float>(
+            mem, entrada.data(), entrada.size(), shape.data(), shape.size()
         );
 
         const char* input_names[]  = {"float_input"};
@@ -74,30 +55,40 @@ std::string ClassificadorECG::classificar() {
 
         auto outputs = session.Run(
             Ort::RunOptions{nullptr},
-            input_names, &input_tensor, 1,
+            input_names, &tensor, 1,
             output_names, 1
         );
 
         ultimaClasse = outputs[0].GetTensorData<int64_t>()[0];
-
-        switch (ultimaClasse) {
-            case 0:  return "Normal";
-            case 1:
-            case 2:
-            case 3:
-            case 4:  return "Possivel Arritmia";
-            default: return "Indefinido";
-        }
+        return static_cast<int>(ultimaClasse);
 
     } catch (const Ort::Exception& e) {
         std::cerr << "Erro ONNX: " << e.what() << std::endl;
         ultimaClasse = -1;
-        return "Erro";
+        return -1;
     } catch (const std::exception& e) {
         std::cerr << "Erro: " << e.what() << std::endl;
         ultimaClasse = -1;
-        return "Erro";
+        return -1;
     }
+}
+
+// ─── Classificação ───────────────────────────────────────
+
+std::string ClassificadorECG::classificarJanela() {
+    static const char* nomes[] = {
+        "Normal",
+        "Arritmia supraventricular",
+        "Batimento ventricular",
+        "Fusao de batimentos",
+        "Batimento desconhecido"
+    };
+
+    int cls = classificar(janelaSinal);
+    if (cls >= 0 && cls < 5) {
+        return nomes[cls];
+    }
+    return "Erro na inferencia";
 }
 
 int64_t ClassificadorECG::getUltimaClasse() const {
