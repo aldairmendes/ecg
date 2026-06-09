@@ -30,6 +30,7 @@ add_executable(executa_testes
     tests/test_main.cpp
     src/ClassificadorECG.cpp
     src/EcgBuffer.cpp
+    src/SerialPort.cpp
     src/modelo_ecg_export.cpp
 )
 

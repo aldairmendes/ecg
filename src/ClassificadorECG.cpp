@@ -6,8 +6,9 @@
 ClassificadorECG::ClassificadorECG() = default;
 
 void ClassificadorECG::processarAmostra(float valorBruto) {
-    float valorNormalizado = normalizar(valorBruto);
-    janelaSinal.push_back(valorNormalizado);
+    // Armazenamos o valor bruto e normalizamos somente na hora da classificação.
+    // Assim evitamos dupla normalização quando o fluxo já chama classificar().
+    janelaSinal.push_back(valorBruto);
 
     if (janelaSinal.size() >= TAMANHO_JANELA) {
         std::string resultado = classificar();
@@ -18,6 +19,12 @@ void ClassificadorECG::processarAmostra(float valorBruto) {
 }
 
 float ClassificadorECG::normalizar(float entrada) {
+    // O dataset MIT-BIH / PTBDB já está no intervalo [0, 1].
+    // Para leituras diretas do ADC do ESP32, que chegam em [0, 4095],
+    // normalizamos dividindo pelo valor máximo do conversor.
+    if (entrada > 1.0f) {
+        return entrada / 4095.0f;
+    }
     return entrada;
 }
 

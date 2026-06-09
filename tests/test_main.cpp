@@ -2,6 +2,9 @@
 #include "catch2/catch.hpp"
 #include "ClassificadorECG.h"
 #include "EcgBuffer.h"
+#include "SerialPort.h"
+#include <cstdlib>
+#include <chrono>
 #include <fstream>
 #include <sstream>
 #include <vector>
@@ -33,9 +36,13 @@ std::vector<std::vector<float>> carregarAmostras(const std::string& path, int li
 
 TEST_CASE("Normalização de sinal", "[ecg]") {
     ClassificadorECG ecg;
+
+    // Raw ADC do ESP32 deve ser normalizado para o mesmo intervalo do dataset.
+    REQUIRE(ecg.normalizar(4095.0f) == Approx(1.0f));
+    REQUIRE(ecg.normalizar(0.0f) == Approx(0.0f));
     
-    // Testa se a normalização está devolvendo o valor esperado
-    REQUIRE(ecg.normalizar(10.0) == 10.0); 
+    // Valores já normalizados devem ser mantidos.
+    REQUIRE(ecg.normalizar(0.5f) == Approx(0.5f));
 }
 
 TEST_CASE("Acúmulo de amostras", "[ecg]") {
@@ -75,41 +82,78 @@ TEST_CASE("Validação do Classificador de ECG com PTBDB", "[ml]") {
     }
 }
 
-TEST_CASE("Simulação de Batimento Real (AD8232)", "[sensor]") {
+static bool parseSample(const std::string& line, uint16_t& sample) {
+    if (line.empty()) {
+        return false;
+    }
+
+    char* end = nullptr;
+    const long value = std::strtol(line.c_str(), &end, 10);
+    if (end == line.c_str() || value < 0 || value > 4095) {
+        return false;
+    }
+
+    sample = static_cast<uint16_t>(value);
+    return true;
+}
+
+TEST_CASE("Teste real com sensor AD8232", "[sensor][manual]") {
+    const char* port = std::getenv("ECG_SENSOR_PORT");
+    if (!port) {
+        WARN("ECG_SENSOR_PORT nao definido. Para testar o sensor real, defina a porta serial em ECG_SENSOR_PORT.");
+        return;
+    }
+
+    SerialPort serial(port, 115200);
+    if (!serial.isOpen()) {
+        WARN("Nao foi possivel abrir a porta serial. Verifique se o sensor AD8232 esta conectado e se a porta esta correta.");
+        return;
+    }
+
     ClassificadorECG classificador;
     ECG_Buffer buffer;
-    
-    // 1. Inicialização do Struct
     buffer.index = 0;
     buffer.ready = false;
 
-    // 2. Simulação de captura do sensor (Preenchendo os 187 pontos)
-    // No hardware real, isso aconteceria dentro de um loop de 360Hz
-    auto amostrasCsv = carregarAmostras("data/ptbdb_normal.csv", 1);
-    auto sinalReal = amostrasCsv[0]; // Pega o primeiro batimento normal
+    std::string line;
+    auto startTime = std::chrono::steady_clock::now();
+    const auto timeout = std::chrono::seconds(20);
 
-    for (float valorSinal : sinalReal) {
+    while (std::chrono::steady_clock::now() - startTime < timeout) {
+        if (!serial.readLine(line)) {
+            continue;
+        }
+
+        uint16_t sample;
+        if (!parseSample(line, sample)) {
+            continue;
+        }
+
         if (buffer.index < BUFFER_SIZE) {
-            buffer.samples[buffer.index] = valorSinal;
-            buffer.index++;
+            buffer.samples[buffer.index++] = sample;
+        }
+
+        if (buffer.index >= BUFFER_SIZE) {
+            buffer.ready = true;
+            break;
         }
     }
-    buffer.ready = (buffer.index == BUFFER_SIZE);
 
-    // 3. Classificação do Struct preenchido
-    SECTION("Classificando o buffer preenchido") {
-        REQUIRE(buffer.ready == true);
-
-        // Convertendo o array do struct para um vector para o classificador
-        std::vector<float> sinalParaClassificar(
-            buffer.samples,             // Isso funciona como um Spread Operator, não é um vetor dentro de outro
-            buffer.samples + BUFFER_SIZE
-        );
-
-        int resultado = classificador.classificar(sinalParaClassificar);
-        
-        // Como o sinal veio do arquivo 'normal', esperamos classe 0
-        CHECK(resultado == 0);
-        std::cout << "Resultado da classificação do buffer: " << resultado << std::endl;
+    if (!buffer.ready) {
+        WARN("Nao foi possivel preencher o buffer com dados do sensor dentro do timeout.");
+        return;
     }
+
+    std::cout << "Buffer size: " << static_cast<unsigned>(buffer.index) << std::endl;
+    // std::cout << "[Buffer] valores: " << std::endl;
+    // for (int i = 0; i < buffer.index; ++i) {
+    //     std::cout << buffer.samples[i] << (i + 1 < buffer.index ? ", " : "");
+    // }
+    // std::cout << std::endl;
+
+    std::vector<float> sinalParaClassificar(buffer.samples, buffer.samples + BUFFER_SIZE);
+    int resultado = classificador.classificar(sinalParaClassificar);
+    std::cout << "Resultado da classificacao com sensor real: " << resultado << std::endl;
+    CHECK(resultado >= 0);
+    CHECK(resultado < 5);
 }

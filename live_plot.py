@@ -4,6 +4,23 @@ import time
 from collections import deque
 
 import numpy as np
+import matplotlib
+# prefer an interactive GUI backend on Windows; try common options
+for _bk in ('TkAgg', 'Qt5Agg', 'QtAgg', 'WXAgg', 'GTK3Agg', 'MacOSX'):
+    try:
+        # quick availability checks for common backends
+        if _bk.startswith('Tk'):
+            import tkinter  # type: ignore
+        if _bk.startswith('Qt'):
+            # prefer PyQt5 or PySide2 for Qt backends
+            try:
+                import PyQt5  # type: ignore
+            except Exception:
+                import PySide2  # type: ignore
+        matplotlib.use(_bk, force=True)
+        break
+    except Exception:
+        continue
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
@@ -303,7 +320,7 @@ def main():
 
         return line, peak_markers, bpm_text
 
-    anim = FuncAnimation(fig, update, interval=args.interval, blit=False)
+    anim = FuncAnimation(fig, update, interval=args.interval, blit=False, cache_frame_data=False)
     plt.tight_layout()
     plt.show()
 
