@@ -126,8 +126,6 @@ O script realiza:
 4. avaliação de acurácia e relatório de classificação;
 5. salvamento do modelo em `ecg/data/modelo_ecg.pkl`.
 
-> Observação: o código C++ atual não carrega `modelo_ecg.pkl`. O modelo usado em tempo de execução é o que já foi exportado para `ecg/src/modelo_ecg_export.cpp`.
-
 ## Observações finais
 
 - Feche o Monitor Serial do Arduino IDE antes de executar `programa_ecg`; caso contrário, a porta serial pode ficar ocupada.
